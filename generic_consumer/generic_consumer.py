@@ -28,7 +28,7 @@ class GenericConsumer:
         pass
 
     @final
-    def run(self, *args, **kwargs):
+    def run(self, *args, **kwargs) -> any:
         if self._has_payload():
             self.payloads = self._get_payloads(
                 *self.__args,
