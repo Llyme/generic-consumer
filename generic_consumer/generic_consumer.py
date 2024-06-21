@@ -49,28 +49,28 @@ class GenericConsumer(ABC):
 
         return self._run(payloads)
 
-    @staticmethod
+    @classmethod
     @final
-    def available_consumers():
+    def available_consumers(cls):
         descendants = get_all_descendant_classes(
-            GenericConsumer,
+            cls,
             exclude=[ABC],
         )
 
         for descendant in descendants:
             yield descendant
 
-    @staticmethod
+    @classmethod
     @final
-    def get_consumer(queue_name: str):
-        descendants = GenericConsumer.get_consumers(queue_name)
+    def get_consumer(cls, queue_name: str):
+        descendants = cls.get_consumers(queue_name)
 
         for descendant in descendants:
             return descendant
 
-    @staticmethod
+    @classmethod
     @final
-    def get_consumers(queue_name: str):
+    def get_consumers(cls, queue_name: str):
         descendants = GenericConsumer.available_consumers()
 
         for descendant in descendants:
