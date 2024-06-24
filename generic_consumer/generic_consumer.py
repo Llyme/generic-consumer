@@ -1,6 +1,6 @@
 from abc import ABC
 import re
-from typing import Any, final
+from typing import Any, List, Tuple, final
 from fun_things import get_all_descendant_classes, categorizer
 from simple_chalk import chalk
 
@@ -82,21 +82,26 @@ class GenericConsumer(ABC):
     @final
     def print_available_consumers(
         cls,
-        indent: int = 2,
         queue_name: str = None,  # type: ignore
+        indent: int = 2,
     ):
         queue_names = map(
             lambda consumer: consumer.queue_name(),
             cls.available_consumers(),
         )
-        categories = [*categorizer(queue_names).items()]
+        categories: List[Tuple[int, Tuple[str, Any]]] = list(
+            map(
+                lambda v: (0, v),
+                categorizer(queue_names).items(),
+            )
+        )
 
         while len(categories) > 0:
             indent_size, (keyword, category) = categories.pop()
+            indent_text = " " * indent_size * indent
 
             print(
-                " " * indent_size * indent,
-                f"{chalk.yellow(keyword)}:",
+                f"{indent_text}{chalk.yellow(keyword)}:",
             )
 
             if isinstance(category, list):
@@ -106,15 +111,14 @@ class GenericConsumer(ABC):
                     count -= 1
 
                     if queue_name != None:
-                        item = (
-                            chalk.green(queue_name)
-                            if item == queue_name
-                            else chalk.red(queue_name)
-                        )
+                        if item == queue_name:
+                            item = f"{chalk.green(item)} <--"
+                        else:
+                            item = chalk.red(item)
 
+                    line = "├" if count > 0 else "└"
                     print(
-                        " " * indent_size * indent,
-                        "├" if count > 0 else "└",
+                        f"{indent_text}{line}",
                         item,
                     )
 
