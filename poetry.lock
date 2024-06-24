@@ -2,16 +2,26 @@
 
 [[package]]
 name = "fun-things"
-version = "0.11.0"
+version = "0.12.1"
 description = ""
 optional = false
 python-versions = "<4.0,>=3.8"
 files = [
-    {file = "fun_things-0.11.0-py3-none-any.whl", hash = "sha256:0cc4c1836c320fb7146deb90a688add50da692c154069a385547c7907d54ba6a"},
-    {file = "fun_things-0.11.0.tar.gz", hash = "sha256:31199fcd38d99624f75ebe7466ad16387231071fae123c6a3657217091afaeb9"},
+    {file = "fun_things-0.12.1-py3-none-any.whl", hash = "sha256:9feeae27303aebad5c7029955885d17e9fb588f49cebf4410dc389a965100e5b"},
+    {file = "fun_things-0.12.1.tar.gz", hash = "sha256:47057347d4d9f7f4b53ebc88d97a22189f44937ba6ca6a4146f75b8389a4224b"},
+]
+
+[[package]]
+name = "simple-chalk"
+version = "0.1.0"
+description = "A terminal string styling library"
+optional = false
+python-versions = ">=3.6"
+files = [
+    {file = "simple_chalk-0.1.0.tar.gz", hash = "sha256:d80f55993dfa040c1b55d2fbfb925e4fbb5798c2934601aa448ef4a192d84196"},
 ]
 
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "009f7e2e84073f7e12997959398b3232cd37693801475da6a2a595dc3e84bf17"
+content-hash = "1aeed27db05b6ebe31da6d665e0c080f1d01257f1c08629c793f353378826c00"

@@ -1,7 +1,8 @@
 from abc import ABC
 import re
 from typing import Any, final
-from fun_things import get_all_descendant_classes
+from fun_things import get_all_descendant_classes, categorizer
+from simple_chalk import chalk
 
 
 class GenericConsumer(ABC):
@@ -76,3 +77,49 @@ class GenericConsumer(ABC):
         for descendant in descendants:
             if descendant.queue_name() == queue_name:
                 yield descendant()
+
+    @classmethod
+    @final
+    def print_available_consumers(
+        cls,
+        indent: int = 2,
+        queue_name: str = None,  # type: ignore
+    ):
+        queue_names = map(
+            lambda consumer: consumer.queue_name(),
+            cls.available_consumers(),
+        )
+        categories = [*categorizer(queue_names).items()]
+
+        while len(categories) > 0:
+            indent_size, (keyword, category) = categories.pop()
+
+            print(
+                " " * indent_size * indent,
+                f"{chalk.yellow(keyword)}:",
+            )
+
+            if isinstance(category, list):
+                count = len(category)
+
+                for item in category:
+                    count -= 1
+
+                    if queue_name != None:
+                        item = (
+                            chalk.green(queue_name)
+                            if item == queue_name
+                            else chalk.red(queue_name)
+                        )
+
+                    print(
+                        " " * indent_size * indent,
+                        "├" if count > 0 else "└",
+                        item,
+                    )
+
+                print()
+                continue
+
+            for sub_category in category.items():
+                categories.append((indent_size + 1, sub_category))
