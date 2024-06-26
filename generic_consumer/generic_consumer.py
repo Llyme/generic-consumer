@@ -1,6 +1,6 @@
 from abc import ABC
 import re
-from typing import Any, List, Tuple, Type, final
+from typing import Any, List, Optional, Tuple, Type, final
 from fun_things import get_all_descendant_classes, categorizer
 from simple_chalk import chalk
 
@@ -192,6 +192,79 @@ class GenericConsumer(ABC):
 
         return result
 
+    @staticmethod
+    def __get_printed_queue_name(
+        item: Type["GenericConsumer"],
+        queue_name: Optional[str],
+    ):
+        item_queue_name = item.queue_name()
+
+        if queue_name == None:
+            return item_queue_name
+
+        if item.condition(queue_name):
+            return f"{chalk.green(item_queue_name)} <--"
+
+        return chalk.red(item_queue_name)
+
+    @staticmethod
+    def __draw_consumers(
+        queue_name: str,
+        consumers: List[Type["GenericConsumer"]],
+        indent_text: str,
+    ):
+        count = len(consumers)
+        max_priority_len = map(
+            lambda consumer: consumer.priority_number(),
+            consumers,
+        )
+        max_priority_len = max(max_priority_len)
+        max_priority_len = abs(max_priority_len)
+        max_priority_len = str(max_priority_len)
+        max_priority_len = len(max_priority_len)
+
+        for consumer in consumers:
+            count -= 1
+            priority_number = str(consumer.priority_number())
+            priority_number = priority_number.zfill(
+                max_priority_len,
+            )
+            line = "├" if count > 0 else "└"
+
+            print(
+                f"{indent_text}{line}",
+                f"[{chalk.yellow(priority_number)}]",
+                GenericConsumer.__get_printed_queue_name(
+                    consumer,
+                    queue_name,
+                ),
+            )
+
+        print()
+
+    @staticmethod
+    def __draw_categories(
+        queue_name: str,
+        indent_size: int,
+        indent_scale: int,
+        keyword: str,
+        category: Any,
+    ):
+        indent_text = " " * indent_size * indent_scale
+
+        print(f"{indent_text}{chalk.yellow(keyword)}:")
+
+        if isinstance(category, list):
+            GenericConsumer.__draw_consumers(
+                queue_name=queue_name,
+                consumers=category,
+                indent_text=indent_text,
+            )
+            return
+
+        for sub_category in category.items():
+            yield indent_size + 1, sub_category
+
     @classmethod
     @final
     def print_available_consumers(
@@ -199,49 +272,30 @@ class GenericConsumer(ABC):
         queue_name: str = None,  # type: ignore
         indent: int = 2,
     ):
-        queue_names = filter(
+        consumers = filter(
             lambda consumer: not consumer.hidden(),
             cls.available_consumers(),
         )
-        queue_names = map(
-            lambda consumer: consumer.queue_name(),
-            cls.available_consumers(),
-        )
-        categories: List[Tuple[int, Tuple[str, Any]]] = list(
+        categorized: List[Tuple[int, Tuple[str, Any]]] = list(
             map(
-                lambda v: (0, v),
-                categorizer(queue_names).items(),
+                lambda consumer: (0, consumer),
+                categorizer(
+                    consumers,
+                    lambda consumer: consumer.queue_name(),
+                ).items(),
             )
         )
 
-        while len(categories) > 0:
-            indent_size, (keyword, category) = categories.pop()
-            indent_text = " " * indent_size * indent
+        while len(categorized) > 0:
+            indent_size, (keyword, category) = categorized.pop()
 
-            print(
-                f"{indent_text}{chalk.yellow(keyword)}:",
+            sub_categories = GenericConsumer.__draw_categories(
+                queue_name=queue_name,
+                indent_size=indent_size,
+                indent_scale=indent,
+                keyword=keyword,
+                category=category,
             )
 
-            if isinstance(category, list):
-                count = len(category)
-
-                for item in category:
-                    count -= 1
-
-                    if queue_name != None:
-                        if item == queue_name:
-                            item = f"{chalk.green(item)} <--"
-                        else:
-                            item = chalk.red(item)
-
-                    line = "├" if count > 0 else "└"
-                    print(
-                        f"{indent_text}{line}",
-                        item,
-                    )
-
-                print()
-                continue
-
-            for sub_category in category.items():
-                categories.append((indent_size + 1, sub_category))
+            for sub_category in sub_categories:
+                categorized.append(sub_category)
