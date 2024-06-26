@@ -175,14 +175,41 @@ class GenericConsumer(ABC):
         print_indent: int = 2,
         error_when_empty: bool = True,
     ):
+        consumers = [*cls.get_consumers(queue_name)]
+        result = []
+
         if print_consumers:
             cls.print_available_consumers(
                 queue_name,
                 print_indent,
             )
 
-        consumers = cls.get_consumers(queue_name)
-        result = []
+            print(
+                f"<{chalk.yellow('Load Order')}>",
+                chalk.yellow("↓"),
+            )
+
+            items = map(
+                lambda consumer: (
+                    str(consumer.priority_number()),
+                    consumer.queue_name(),
+                ),
+                consumers,
+            )
+
+            zfill = None
+
+            for priority_number, queue_name in items:
+                if zfill == None:
+                    zfill = len(priority_number)
+
+                priority_number = priority_number.zfill(zfill)
+                print(
+                    f"[{chalk.yellow(priority_number)}]",
+                    chalk.green(queue_name),
+                )
+
+            print()
 
         for consumer in consumers:
             result.append(consumer.run())
