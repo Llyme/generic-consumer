@@ -1,6 +1,6 @@
 from abc import ABC
 import re
-from typing import Any, List, Tuple, final
+from typing import Any, List, Tuple, Type, final
 from fun_things import get_all_descendant_classes, categorizer
 from simple_chalk import chalk
 
@@ -95,6 +95,10 @@ class GenericConsumer(ABC):
 
     @final
     def run(self, *args, **kwargs):
+        """
+        Ignores `max_run_count`.
+        """
+        self.__class__.__run_count += 1
         self.args = args
         self.kwargs = kwargs
 
@@ -103,6 +107,15 @@ class GenericConsumer(ABC):
         payloads = self._get_payloads() or []
 
         return self._run(payloads)
+
+    @staticmethod
+    def __consumer_predicate(consumer: Type["GenericConsumer"]):
+        max_run_count = consumer.max_run_count()
+
+        if max_run_count <= 0:
+            return True
+
+        return consumer.__run_count < max_run_count
 
     @classmethod
     @final
@@ -115,8 +128,7 @@ class GenericConsumer(ABC):
             exclude=[ABC],
         )
         descendants = filter(
-            lambda descendant: descendant.__run_count <= 0
-            or descendant.__run_count < descendant.max_run_count(),
+            GenericConsumer.__consumer_predicate,
             descendants,
         )
 
@@ -145,6 +157,8 @@ class GenericConsumer(ABC):
         Returns all consumers that has a
         satisfied `condition(queue_name)`,
         starting from the highest priority number.
+
+        The consumers are instantiated while generating.
         """
         descendants = GenericConsumer.available_consumers()
 
