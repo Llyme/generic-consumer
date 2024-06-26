@@ -6,11 +6,40 @@ from simple_chalk import chalk
 
 
 class GenericConsumer(ABC):
+    __run_count = 0
+
     def _init(self):
         """
         Called when `run()` is called.
         """
         pass
+
+    @classmethod
+    def hidden(cls):
+        """
+        If this consumer should not be displayed when printing
+        available consumers.
+
+        Hidden consumers are still called
+        if they have a satisfied condition.
+
+        You can override this by making a static/class method
+        with the name `hidden`.
+        """
+        return False
+
+    @classmethod
+    def max_run_count(cls):
+        """
+        The number of times this consumer can be called.
+
+        At 0 or less,
+        this consumer can be called at any number of times.
+
+        You can override this by making a static/class method
+        with the name `run_once`.
+        """
+        return 0
 
     @classmethod
     def queue_name(cls):
@@ -36,7 +65,8 @@ class GenericConsumer(ABC):
     @classmethod
     def priority_number(cls):
         """
-        If there are multiple consumers with the same queue,
+        If there are multiple consumers that
+        have satisfied conditions,
         the highest priority number goes first.
 
         You can override this by making a static/class method
@@ -84,6 +114,11 @@ class GenericConsumer(ABC):
             cls,
             exclude=[ABC],
         )
+        descendants = filter(
+            lambda descendant: descendant.__run_count <= 0
+            or descendant.__run_count < descendant.max_run_count(),
+            descendants,
+        )
 
         return sorted(
             descendants,
@@ -119,11 +154,41 @@ class GenericConsumer(ABC):
 
     @classmethod
     @final
+    def start(
+        cls,
+        queue_name: str,
+        print_consumers: bool = True,
+        print_indent: int = 2,
+        error_when_empty: bool = True,
+    ):
+        if print_consumers:
+            cls.print_available_consumers(
+                queue_name,
+                print_indent,
+            )
+
+        consumers = cls.get_consumers(queue_name)
+        result = []
+
+        for consumer in consumers:
+            result.append(consumer.run())
+
+        if error_when_empty and len(result) == 0:
+            raise Exception(f"Unknown queue '{queue_name}'!")
+
+        return result
+
+    @classmethod
+    @final
     def print_available_consumers(
         cls,
         queue_name: str = None,  # type: ignore
         indent: int = 2,
     ):
+        queue_names = filter(
+            lambda consumer: not consumer.hidden(),
+            cls.available_consumers(),
+        )
         queue_names = map(
             lambda consumer: consumer.queue_name(),
             cls.available_consumers(),

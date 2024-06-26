@@ -4,6 +4,10 @@ from .generic_consumer import GenericConsumer
 
 
 class BasicConsumer(GenericConsumer, ABC):
+    """
+    A simple implementation of a consumer that requires a payload.
+    """
+
     log = True
 
     def _no_payloads(self) -> Any:
