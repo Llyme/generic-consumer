@@ -17,7 +17,7 @@ class GenericConsumer(ABC):
         """
         Generic naming for queue names.
 
-        You can change this by making a static/class method
+        You can override this by making a static/class method
         with the name `queue_name`.
         """
         return re.sub(
@@ -32,6 +32,30 @@ class GenericConsumer(ABC):
             "_",
             cls.__name__,
         ).upper()
+
+    @classmethod
+    def priority_number(cls):
+        """
+        If there are multiple consumers with the same queue,
+        the highest priority number goes first.
+
+        You can override this by making a static/class method
+        with the name `priority_number`.
+        """
+        return 0
+
+    @classmethod
+    def condition(cls, queue_name: str):
+        """
+        Must return `True` in order for this consumer to be selected.
+
+        By default, this checks if the `queue_name` is the same
+        as this consumer's `queue_name`.
+
+        You can override this by making a static/class method
+        with the name `condition`.
+        """
+        return cls.queue_name() == queue_name
 
     def _get_payloads(self) -> list:  # type: ignore
         pass
@@ -53,17 +77,27 @@ class GenericConsumer(ABC):
     @classmethod
     @final
     def available_consumers(cls):
+        """
+        All consumers sorted by highest priority number.
+        """
         descendants = get_all_descendant_classes(
             cls,
             exclude=[ABC],
         )
 
-        for descendant in descendants:
-            yield descendant
+        return sorted(
+            descendants,
+            key=lambda descendant: descendant.priority_number(),
+            reverse=True,
+        )
 
     @classmethod
     @final
     def get_consumer(cls, queue_name: str):
+        """
+        Returns the first consumer with the given `queue_name`
+        and the highest priority number.
+        """
         descendants = cls.get_consumers(queue_name)
 
         for descendant in descendants:
@@ -72,10 +106,15 @@ class GenericConsumer(ABC):
     @classmethod
     @final
     def get_consumers(cls, queue_name: str):
+        """
+        Returns all consumers that has a
+        satisfied `condition(queue_name)`,
+        starting from the highest priority number.
+        """
         descendants = GenericConsumer.available_consumers()
 
         for descendant in descendants:
-            if descendant.queue_name() == queue_name:
+            if descendant.condition(queue_name):
                 yield descendant()
 
     @classmethod
