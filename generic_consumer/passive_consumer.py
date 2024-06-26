@@ -1,7 +1,9 @@
 from abc import ABC
 
+from .generic_consumer import GenericConsumer
 
-class PassiveConsumer(ABC):
+
+class PassiveConsumer(GenericConsumer, ABC):
     """
     A simple implementation of a consumer that is always called
     and will only run once.
