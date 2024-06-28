@@ -240,19 +240,37 @@ class GenericConsumer(ABC):
         consumers: List[Type["GenericConsumer"]],
         indent_text: str,
     ):
-        count = len(consumers)
-        max_priority_len = map(
-            lambda consumer: consumer.priority_number(),
-            consumers,
+        consumers.sort(
+            key=lambda consumer: consumer.priority_number(),
+            reverse=True,
         )
-        max_priority_len = max(max_priority_len)
-        max_priority_len = abs(max_priority_len)
+
+        count = len(consumers)
+        priority_numbers = [
+            *map(
+                lambda consumer: consumer.priority_number(),
+                consumers,
+            )
+        ]
+        max_priority_len = max(priority_numbers)
         max_priority_len = str(max_priority_len)
         max_priority_len = len(max_priority_len)
+        has_negative = map(
+            lambda number: number < 0,
+            priority_numbers,
+        )
+        has_negative = any(has_negative)
 
         for consumer in consumers:
             count -= 1
-            priority_number = str(consumer.priority_number())
+
+            priority_number = consumer.priority_number()
+
+            if has_negative:
+                priority_number = "%+d" % priority_number
+            else:
+                priority_number = str(priority_number)
+
             priority_number = priority_number.zfill(
                 max_priority_len,
             )

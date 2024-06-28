@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "generic-consumer"
-version = "0.6.10"
+version = "0.6.11"
 description = ""
 authors = ["Mister Nyan <michael.edmund.wong@gmail.com>"]
 readme = "README.md"
@@ -8,7 +8,7 @@ readme = "README.md"
 [tool.poetry.dependencies]
 python = "^3.8"
 simple-chalk = "^0.1.0"
-fun-things = "^0.15.3"
+fun-things = "^0.16.0"
 
 
 [build-system]
