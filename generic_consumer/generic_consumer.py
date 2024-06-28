@@ -15,6 +15,13 @@ class GenericConsumer(ABC):
         pass
 
     @classmethod
+    def passive(cls):
+        """
+        Determines the consumer's significance in `start()`.
+        """
+        return False
+
+    @classmethod
     def hidden(cls):
         """
         If this consumer should not be displayed when printing
@@ -175,49 +182,80 @@ class GenericConsumer(ABC):
         print_indent: int = 2,
         error_when_empty: bool = True,
     ):
+        """
+        Requires at least 1 non-passive consumer to be selected.
+        """
         consumers = [*cls.get_consumers(queue_name)]
         result = []
+        ok = False
 
         if print_consumers:
             cls.print_available_consumers(
                 queue_name,
                 print_indent,
             )
-
-            print(
-                f"<{chalk.yellow('Load Order')}>",
-                chalk.yellow("↓"),
-            )
-
-            items = map(
-                lambda consumer: (
-                    str(consumer.priority_number()),
-                    consumer.queue_name(),
-                ),
-                consumers,
-            )
-
-            zfill = None
-
-            for priority_number, queue_name in items:
-                if zfill == None:
-                    zfill = len(priority_number)
-
-                priority_number = priority_number.zfill(zfill)
-                print(
-                    f"[{chalk.yellow(priority_number)}]",
-                    chalk.green(queue_name),
-                )
-
-            print()
+            cls.__print_load_order(consumers)
 
         for consumer in consumers:
             result.append(consumer.run())
 
-        if error_when_empty and len(result) == 0:
+            if not consumer.passive():
+                ok = True
+
+        if error_when_empty and not ok:
             raise Exception(f"Unknown queue '{queue_name}'!")
 
         return result
+
+    @staticmethod
+    def __print_load_order(consumers: List["GenericConsumer"]):
+        if not any(consumers):
+            return
+
+        print(
+            f"<{chalk.yellow('Load Order')}>",
+            chalk.yellow.bold("↓"),
+        )
+
+        items = map(
+            lambda consumer: (
+                consumer.priority_number(),
+                consumer.queue_name(),
+                consumer.passive(),
+            ),
+            consumers,
+        )
+
+        has_negative = consumers[-1].priority_number() < 0
+        zfill = map(
+            lambda consumer: consumer.priority_number(),
+            consumers,
+        )
+        zfill = map(lambda number: len(str(abs(number))), zfill)
+        zfill = max(zfill)
+
+        if has_negative:
+            zfill += 1
+
+        for priority_number, queue_name, passive in items:
+            if has_negative:
+                priority_number = "%+d" % priority_number
+            else:
+                priority_number = str(priority_number)
+
+            priority_number = priority_number.zfill(zfill)
+
+            if passive:
+                queue_name = chalk.blue.bold(queue_name)
+            else:
+                queue_name = chalk.green.bold(queue_name)
+
+            print(
+                f"[{chalk.yellow(priority_number)}]",
+                chalk.green(queue_name),
+            )
+
+        print()
 
     @staticmethod
     def __get_printed_queue_name(
@@ -230,9 +268,14 @@ class GenericConsumer(ABC):
             return item_queue_name
 
         if item.condition(queue_name):
-            return f"{chalk.green(item_queue_name)} <--"
+            if item.passive():
+                item_queue_name = chalk.blue.bold(item_queue_name)
+            else:
+                item_queue_name = chalk.green.bold(item_queue_name)
 
-        return chalk.red(item_queue_name)
+            return f"{item_queue_name} <--"
+
+        return chalk.dim(item_queue_name)
 
     @staticmethod
     def __draw_consumers(
@@ -252,14 +295,19 @@ class GenericConsumer(ABC):
                 consumers,
             )
         ]
-        max_priority_len = max(priority_numbers)
-        max_priority_len = str(max_priority_len)
-        max_priority_len = len(max_priority_len)
+        max_priority_len = map(
+            lambda number: len(str(abs(number))),
+            priority_numbers,
+        )
+        max_priority_len = max(max_priority_len)
         has_negative = map(
             lambda number: number < 0,
             priority_numbers,
         )
         has_negative = any(has_negative)
+
+        if has_negative:
+            max_priority_len += 1
 
         for consumer in consumers:
             count -= 1
@@ -295,6 +343,9 @@ class GenericConsumer(ABC):
         keyword: str,
         category: Any,
     ):
+        if keyword == None:
+            keyword = "*"
+
         indent_text = " " * indent_size * indent_scale
 
         print(f"{indent_text}{chalk.yellow(keyword)}:")

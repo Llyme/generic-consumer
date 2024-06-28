@@ -10,7 +10,7 @@ class PassiveConsumer(GenericConsumer, ABC):
     """
 
     @classmethod
-    def hidden(cls):
+    def passive(cls):
         return True
 
     @classmethod
