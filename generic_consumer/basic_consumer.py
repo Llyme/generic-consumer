@@ -34,8 +34,8 @@ class BasicConsumer(GenericConsumer, ABC):
         if payloads == None:
             return None
 
-        if self._payload_is_json():
-            return payloads
+        if not self._payload_is_json():
+            return payloads or None
 
         result = []
         ok = False
