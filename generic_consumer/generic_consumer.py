@@ -275,7 +275,7 @@ class GenericConsumer(ABC):
 
             return f"{item_queue_name} <--"
 
-        return chalk.dim(item_queue_name)
+        return chalk.dim.gray(item_queue_name)
 
     @staticmethod
     def __draw_consumers(
