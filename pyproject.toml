@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "generic-consumer"
-version = "0.8.1"
+version = "0.9.0"
 description = ""
 authors = ["Mister Nyan <michael.edmund.wong@gmail.com>"]
 readme = "README.md"

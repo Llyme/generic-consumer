@@ -1,7 +1,16 @@
 from abc import ABC
 import json
-from typing import Any
+from signal import SIGTERM
+from typing import Any, Iterable, Literal, Union
+import zlib
 from .generic_consumer import GenericConsumer
+
+
+PayloadPreprocessor = Union[
+    Literal["ZLIB_DECOMPRESS"],
+    Literal["JSON_LOADS"],
+    Literal["BYTES_DECODE"],
+]
 
 
 class BasicConsumer(GenericConsumer, ABC):
@@ -12,11 +21,13 @@ class BasicConsumer(GenericConsumer, ABC):
     log = True
 
     @classmethod
-    def _payload_is_json(cls):
+    def _payload_preprocessors(
+        cls,
+    ) -> Iterable[PayloadPreprocessor]:
         """
-        If the payload should be converted into a dictionary.
+        Transforms payloads before being processed.
         """
-        return False
+        return []
 
     def _no_payloads(self):
         """
@@ -30,27 +41,44 @@ class BasicConsumer(GenericConsumer, ABC):
         """
         return True
 
+    def __process_payload(self, payload):
+        payload_preprocessors = self._payload_preprocessors()
+
+        for cmd in payload_preprocessors:
+            if cmd == "BYTES_DECODE":
+                return payload.decode()
+
+            if cmd == "JSON_LOADS":
+                return json.loads(payload)
+
+            if cmd == "ZLIB_DECOMPRESS":
+                return zlib.decompress(payload)
+
+            raise Exception(
+                f"Unknown payload preprocessor '{cmd}'!",
+            )
+
+        return payload
+
     def __try_json_payloads(self, payloads: list):
         if payloads == None:
             return None
-
-        if not self._payload_is_json():
-            return payloads or None
 
         result = []
         ok = False
 
         for payload in payloads:
             try:
-                result.append(json.loads(payload))
+                result.append(self.__process_payload(payload))
                 ok = True
-            except:
-                pass
+
+            except Exception as e:
+                print("Payload processing error!", e)
 
         return result if ok else None
 
-    def _run(self, payloads: list) -> Any:
-        payloads = self.__try_json_payloads(payloads)  # type: ignore
+    def _run(self, payloads):
+        payloads = self.__try_json_payloads(payloads)
 
         if payloads == None:
             return self._no_payloads()
@@ -61,4 +89,4 @@ class BasicConsumer(GenericConsumer, ABC):
         if self.log:
             print(f"Got {count} payload(s) from '{queue_name}'.")
 
-        return self._has_payloads(payloads)
+        return SIGTERM

@@ -1,6 +1,7 @@
 from abc import ABC
 import re
-from typing import Any, List, Optional, Tuple, Type, final
+from signal import SIGABRT, SIGTERM
+from typing import Any, Iterable, List, Optional, Tuple, Type, final
 from fun_things import get_all_descendant_classes, categorizer
 from simple_chalk import chalk
 
@@ -94,14 +95,43 @@ class GenericConsumer(ABC):
         """
         return cls.queue_name() == queue_name
 
-    def _get_payloads(self) -> list:  # type: ignore
+    def _get_payloads(self) -> Any:  # type: ignore
         pass
 
-    def _run(self, payloads: list) -> Any:
-        pass
+    def __get_payloads(self):
+        payloads = self._get_payloads()
+
+        if payloads == None:
+            return []
+
+        if isinstance(payloads, list):
+            return payloads
+
+        if isinstance(payloads, Iterable):
+            return [*payloads]
+
+        raise Exception("Payloads must be iterable!")
+
+    def _run(self, payloads: list):
+        """
+        Processes all of the payloads.
+
+        Return `SIGTERM` to use `_run_one()`.
+        """
+        return SIGTERM
+
+    def _run_one(self, payload):
+        """
+        Processes 1 payload.
+
+        Return `SIGTERM` to use `_run()`.
+
+        Return `SIGABRT` to ignore result.
+        """
+        return SIGTERM
 
     @final
-    def run(self, *args, **kwargs):
+    def run(self, *args, **kwargs) -> Any:
         """
         Ignores `max_run_count`.
         """
@@ -111,9 +141,21 @@ class GenericConsumer(ABC):
 
         self._init()
 
-        payloads = self._get_payloads() or []
+        payloads = self.__get_payloads()
 
-        return self._run(payloads)
+        result = self._run(payloads)
+
+        if result != SIGTERM:
+            return result
+
+        for payload in payloads:
+            result = self._run_one(payload)
+
+            if result == SIGTERM:
+                break
+
+            if result != SIGABRT:
+                yield result
 
     @staticmethod
     def __consumer_predicate(consumer: Type["GenericConsumer"]):
