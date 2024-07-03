@@ -38,15 +38,19 @@ class BasicConsumer(GenericConsumer, ABC):
 
         for cmd in payload_preprocessors:
             if cmd == PayloadPreprocessor.BYTES_DECODE:
-                return payload.decode()
+                payload = payload.decode()  # type: ignore
 
-            if cmd == PayloadPreprocessor.JSON_LOADS:
-                return json.loads(payload)
+            elif cmd == PayloadPreprocessor.JSON_LOADS:
+                payload = json.loads(payload)
 
-            if cmd == PayloadPreprocessor.ZLIB_DECOMPRESS:
-                return zlib.decompress(payload)
+            elif cmd == PayloadPreprocessor.ZLIB_DECOMPRESS:
+                payload = zlib.decompress(payload)  # type: ignore
 
-            return self._custom_payload_preprocessor(cmd, payload)
+            else:
+                payload = self._custom_payload_preprocessor(
+                    cmd,  # type: ignore
+                    payload,
+                )
 
         return payload
 
