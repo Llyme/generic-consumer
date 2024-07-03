@@ -1,7 +1,7 @@
 from abc import ABC
 import re
 from signal import SIGABRT, SIGTERM
-from typing import Any, Iterable, List, Optional, Tuple, Type, final
+from typing import Any, Generator, Iterable, List, Optional, Tuple, Type, final
 from fun_things import get_all_descendant_classes, categorizer
 from simple_chalk import chalk
 
@@ -116,22 +116,20 @@ class GenericConsumer(ABC):
         """
         Processes all of the payloads.
 
-        Return `SIGTERM` to use `_run_one()`.
+        Return `SIGABRT` to use `_run_one()`.
         """
-        return SIGTERM
+        return SIGABRT
 
     def _run_one(self, payload):
         """
         Processes 1 payload.
 
-        Return `SIGTERM` to use `_run()`.
-
-        Return `SIGABRT` to ignore result.
+        Return `SIGABRT` to use `_run()`.
         """
-        return SIGTERM
+        return SIGABRT
 
     @final
-    def run(self, *args, **kwargs) -> Any:
+    def run(self, *args, **kwargs) -> Generator[Any, Any, None]:
         """
         Ignores `max_run_count`.
         """
@@ -145,17 +143,17 @@ class GenericConsumer(ABC):
 
         result = self._run(payloads)
 
-        if result != SIGTERM:
-            return result
+        if result != SIGABRT:
+            yield result
+            return
 
         for payload in payloads:
             result = self._run_one(payload)
 
-            if result == SIGTERM:
+            if result == SIGABRT:
                 break
 
-            if result != SIGABRT:
-                yield result
+            yield result
 
     @staticmethod
     def __consumer_predicate(consumer: Type["GenericConsumer"]):
@@ -228,7 +226,6 @@ class GenericConsumer(ABC):
         Requires at least 1 non-passive consumer to be selected.
         """
         consumers = [*cls.get_consumers(queue_name)]
-        result = []
         ok = False
 
         if print_consumers:
@@ -239,15 +236,16 @@ class GenericConsumer(ABC):
             cls.__print_load_order(consumers)
 
         for consumer in consumers:
-            result.append(consumer.run())
+            results = consumer.run()
+
+            for result in results:
+                yield result
 
             if not consumer.passive():
                 ok = True
 
         if error_when_empty and not ok:
             raise Exception(f"Unknown queue '{queue_name}'!")
-
-        return result
 
     @staticmethod
     def __print_load_order(consumers: List["GenericConsumer"]):

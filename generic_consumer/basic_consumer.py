@@ -1,16 +1,10 @@
 from abc import ABC
 import json
 from signal import SIGTERM
-from typing import Any, Iterable, Literal, Union
+from typing import Iterable
 import zlib
 from .generic_consumer import GenericConsumer
-
-
-PayloadPreprocessor = Union[
-    Literal["ZLIB_DECOMPRESS"],
-    Literal["JSON_LOADS"],
-    Literal["BYTES_DECODE"],
-]
+from .payload_preprocessor import PayloadPreprocessor
 
 
 class BasicConsumer(GenericConsumer, ABC):
@@ -23,9 +17,11 @@ class BasicConsumer(GenericConsumer, ABC):
     @classmethod
     def _payload_preprocessors(
         cls,
-    ) -> Iterable[PayloadPreprocessor]:
+    ) -> Iterable[str]:
         """
         Transforms payloads before being processed.
+
+        Use `generic_consumer.PayloadPreprocessor`
         """
         return []
 
@@ -45,19 +41,20 @@ class BasicConsumer(GenericConsumer, ABC):
         payload_preprocessors = self._payload_preprocessors()
 
         for cmd in payload_preprocessors:
-            if cmd == "BYTES_DECODE":
+            if cmd == PayloadPreprocessor.BYTES_DECODE:
                 return payload.decode()
 
-            if cmd == "JSON_LOADS":
+            if cmd == PayloadPreprocessor.JSON_LOADS:
                 return json.loads(payload)
 
-            if cmd == "ZLIB_DECOMPRESS":
+            if cmd == PayloadPreprocessor.ZLIB_DECOMPRESS:
                 return zlib.decompress(payload)
 
-            raise Exception(
-                f"Unknown payload preprocessor '{cmd}'!",
-            )
+            return self._custom_payload_preprocessor(cmd, payload)
 
+        return payload
+
+    def _custom_payload_preprocessor(self, cmd: str, payload):
         return payload
 
     def __try_json_payloads(self, payloads: list):
