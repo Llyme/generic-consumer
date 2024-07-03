@@ -1,7 +1,5 @@
 from abc import ABC
 import json
-from signal import SIGTERM
-from typing import Iterable
 import zlib
 from .generic_consumer import GenericConsumer
 from .payload_preprocessor import PayloadPreprocessor
@@ -15,9 +13,7 @@ class BasicConsumer(GenericConsumer, ABC):
     log = True
 
     @classmethod
-    def _payload_preprocessors(
-        cls,
-    ) -> Iterable[str]:
+    def _payload_preprocessors(cls):
         """
         Transforms payloads before being processed.
 
@@ -86,4 +82,4 @@ class BasicConsumer(GenericConsumer, ABC):
         if self.log:
             print(f"Got {count} payload(s) from '{queue_name}'.")
 
-        return SIGTERM
+        return self._has_payloads(payloads)
