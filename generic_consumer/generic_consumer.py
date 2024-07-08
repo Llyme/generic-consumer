@@ -60,11 +60,14 @@ class GenericConsumer(ABC):
         return re.sub(
             # 1;
             # Look for an uppercase after a lowercase.
+            # HelloWorld = HELLO_WORLD
             # 2;
             # Look for an uppercase followed by a lowercase,
             # after an uppercase or a number.
+            # Example; HELLOWorld = HELLO_WORLD
             # 3;
             # Look for a number after a letter.
+            # Example; HelloWorld1 = HELLO_WORLD_1
             r"(?<=[a-z])(?=[A-Z0-9])|(?<=[A-Z0-9])(?=[A-Z][a-z])|(?<=[A-Za-z])(?=\d)",
             "_",
             cls.__name__,
@@ -116,15 +119,15 @@ class GenericConsumer(ABC):
         """
         Processes all of the payloads.
 
-        Return `SIGABRT` to use `_run_one()`.
+        Return `signal.SIGABRT` to use `_run_one()`.
         """
         return SIGABRT
 
     def _run_one(self, payload):
         """
-        Processes 1 payload.
+        Processes payloads 1 by 1.
 
-        Return `SIGABRT` to use `_run()`.
+        Return `signal.SIGABRT` to stop.
         """
         return SIGABRT
 

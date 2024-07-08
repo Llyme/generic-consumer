@@ -1,8 +1,7 @@
 from abc import ABC
-import json
-import zlib
+from signal import SIGABRT
+from typing import Any, Callable, Iterable, final
 from .generic_consumer import GenericConsumer
-from .payload_preprocessor import PayloadPreprocessor
 
 
 class BasicConsumer(GenericConsumer, ABC):
@@ -11,9 +10,12 @@ class BasicConsumer(GenericConsumer, ABC):
     """
 
     log = True
+    run_one_by_one = False
 
     @classmethod
-    def _payload_preprocessors(cls):
+    def _payload_preprocessors(
+        cls,
+    ) -> Iterable[Callable[[Any], Any]]:
         """
         Transforms payloads before being processed.
 
@@ -34,30 +36,14 @@ class BasicConsumer(GenericConsumer, ABC):
         return True
 
     def __process_payload(self, payload):
-        payload_preprocessors = self._payload_preprocessors()
+        callables = self._payload_preprocessors()
 
-        for cmd in payload_preprocessors:
-            if cmd == PayloadPreprocessor.BYTES_DECODE:
-                payload = payload.decode()  # type: ignore
-
-            elif cmd == PayloadPreprocessor.JSON_LOADS:
-                payload = json.loads(payload)
-
-            elif cmd == PayloadPreprocessor.ZLIB_DECOMPRESS:
-                payload = zlib.decompress(payload)  # type: ignore
-
-            else:
-                payload = self._custom_payload_preprocessor(
-                    cmd,  # type: ignore
-                    payload,
-                )
+        for callable in callables:
+            payload = callable(payload)
 
         return payload
 
-    def _custom_payload_preprocessor(self, cmd: str, payload):
-        return payload
-
-    def __try_json_payloads(self, payloads: list):
+    def __process_payloads(self, payloads: list):
         if payloads == None:
             return None
 
@@ -74,8 +60,12 @@ class BasicConsumer(GenericConsumer, ABC):
 
         return result if ok else None
 
+    @final
     def _run(self, payloads):
-        payloads = self.__try_json_payloads(payloads)
+        if self.run_one_by_one:
+            return SIGABRT
+
+        payloads = self.__process_payloads(payloads)
 
         if payloads == None:
             return self._no_payloads()
@@ -87,3 +77,11 @@ class BasicConsumer(GenericConsumer, ABC):
             print(f"Got {count} payload(s) from '{queue_name}'.")
 
         return self._has_payloads(payloads)
+
+    @final
+    def _run_one(self, payload):
+        try:
+            return self.__process_payload(payload)
+
+        except Exception as e:
+            print("Payload processing error!", e)
