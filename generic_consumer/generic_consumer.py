@@ -7,6 +7,10 @@ from simple_chalk import chalk
 
 
 class GenericConsumer(ABC):
+    enabled = True
+    """
+    If this consumer is enabled.
+    """
     __run_count = 0
 
     def _init(self):
@@ -19,6 +23,8 @@ class GenericConsumer(ABC):
     def passive(cls):
         """
         Determines the consumer's significance in `start()`.
+
+        See `start()` for more details.
         """
         return False
 
@@ -213,23 +219,32 @@ class GenericConsumer(ABC):
         descendants = GenericConsumer.available_consumers()
 
         for descendant in descendants:
-            if descendant.condition(queue_name):
-                yield descendant()
+            if not descendant.enabled:
+                continue
+
+            if not descendant.condition(queue_name):
+                continue
+
+            yield descendant()
 
     @classmethod
     @final
     def start(
         cls,
         queue_name: str,
-        print_consumers: bool = True,
-        print_indent: int = 2,
-        error_when_empty: bool = True,
+        print_consumers=True,
+        print_indent=2,
+        require_non_passive_consumer=True,
     ):
         """
         Requires at least 1 non-passive consumer to be selected.
         """
         consumers = [*cls.get_consumers(queue_name)]
-        ok = False
+        has_non_passive = map(
+            lambda v: not v.passive(),
+            consumers,
+        )
+        has_non_passive = any(has_non_passive)
 
         if print_consumers:
             cls.print_available_consumers(
@@ -238,17 +253,16 @@ class GenericConsumer(ABC):
             )
             cls.__print_load_order(consumers)
 
+        if require_non_passive_consumer and not has_non_passive:
+            raise Exception(
+                f"No non-passive consumers for '{queue_name}'!",
+            )
+
         for consumer in consumers:
             results = consumer.run()
 
             for result in results:
                 yield result
-
-            if not consumer.passive():
-                ok = True
-
-        if error_when_empty and not ok:
-            raise Exception(f"Unknown queue '{queue_name}'!")
 
     @staticmethod
     def __print_load_order(consumers: List["GenericConsumer"]):
@@ -305,20 +319,31 @@ class GenericConsumer(ABC):
         item: Type["GenericConsumer"],
         queue_name: Optional[str],
     ):
-        item_queue_name = item.queue_name()
+        text = item.queue_name()
 
         if queue_name == None:
-            return item_queue_name
+            return text
 
-        if item.condition(queue_name):
-            if item.passive():
-                item_queue_name = chalk.blue.bold(item_queue_name)
-            else:
-                item_queue_name = chalk.green.bold(item_queue_name)
+        if not item.enabled:
+            # Not enabled.
+            text = chalk.dim.gray(text)
+            text = f"{text} {chalk.bold('✕')}"
 
-            return f"{item_queue_name} <--"
+        elif not item.condition(queue_name):
+            # Enabled, but condition is not met.
+            text = chalk.dim.gray(text)
 
-        return chalk.dim.gray(item_queue_name)
+        elif item.passive():
+            # Passive consumer.
+            text = chalk.blue.bold(text)
+            text = f"{text} {chalk.bold('✓')}"
+
+        else:
+            # Non-passive (active) consumer.
+            text = chalk.green.bold(text)
+            text = f"{text} {chalk.bold('✓')}"
+
+        return text
 
     @staticmethod
     def __draw_consumers(
