@@ -18,9 +18,12 @@ from simple_chalk import chalk
 
 class GenericConsumer(ABC):
     enabled = True
-    log = True
     """
     If this consumer is enabled.
+    """
+    log = True
+    """
+    If this consumer should print in the console.
     """
     __run_count = 0
 
@@ -29,6 +32,13 @@ class GenericConsumer(ABC):
         Called when `run()` is called.
         """
         pass
+
+    @classmethod
+    def get_run_count(cls):
+        """
+        The amount of times this consumer has run.
+        """
+        return cls.__run_count
 
     @classmethod
     def passive(cls):
@@ -69,7 +79,7 @@ class GenericConsumer(ABC):
     @classmethod
     def queue_name(cls):
         """
-        Generic naming for queue names.
+        The name of this consumer.
 
         You can override this by making a static/class method
         with the name `queue_name`.
@@ -142,7 +152,8 @@ class GenericConsumer(ABC):
 
             return processed_payload
         except Exception as e:
-            print("Payload processing errro!", e)
+            if self.log:
+                print("Payload processing error!", e)
 
         return payload
 
@@ -188,7 +199,7 @@ class GenericConsumer(ABC):
         payloads_count = len(payloads)
         queue_name = self.queue_name()
 
-        if payloads_count > 0:
+        if self.log and payloads_count > 0:
             print(
                 "Got",
                 payloads_count,
@@ -292,7 +303,7 @@ class GenericConsumer(ABC):
         )
         has_non_passive = any(has_non_passive)
 
-        if print_consumers:
+        if cls.log and print_consumers:
             cls.print_available_consumers(
                 queue_name,
                 print_indent,
