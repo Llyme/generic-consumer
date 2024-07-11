@@ -115,12 +115,18 @@ class GenericConsumer(ABC):
         """
         return cls.queue_name() == queue_name
 
-    def get_payloads(self) -> Any:  # type: ignore
+    def get_payloads(self):  # type: ignore
+        """
+        Return the payloads here.
+
+        Can be non-iterable,
+        which becomes an array with a single value.
+        """
         pass
 
     def payload_preprocessors(
         self,
-    ) -> Iterable[Callable[[Any], Any]]:
+    ) -> Iterable[Callable]:
         """
         Transforms payloads before being processed.
         """
@@ -155,8 +161,6 @@ class GenericConsumer(ABC):
     def process(self, payloads: list):
         """
         Processes all of the payloads.
-
-        Return `signal.SIGABRT` to use `_run_one()`.
         """
         return SIGABRT
 
