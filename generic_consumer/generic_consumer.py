@@ -1,19 +1,30 @@
 from abc import ABC
 import re
 from signal import SIGABRT, SIGTERM
-from typing import Any, Generator, Iterable, List, Optional, Tuple, Type, final
+from typing import (
+    Any,
+    Callable,
+    Generator,
+    Iterable,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    final,
+)
 from fun_things import get_all_descendant_classes, categorizer
 from simple_chalk import chalk
 
 
 class GenericConsumer(ABC):
     enabled = True
+    log = True
     """
     If this consumer is enabled.
     """
     __run_count = 0
 
-    def _init(self):
+    def init(self):
         """
         Called when `run()` is called.
         """
@@ -104,24 +115,44 @@ class GenericConsumer(ABC):
         """
         return cls.queue_name() == queue_name
 
-    def _get_payloads(self) -> Any:  # type: ignore
+    def get_payloads(self) -> Any:  # type: ignore
         pass
 
-    def __get_payloads(self):
-        payloads = self._get_payloads()
+    def payload_preprocessors(
+        self,
+    ) -> Iterable[Callable[[Any], Any]]:
+        """
+        Transforms payloads before being processed.
+        """
+        return []
 
-        if payloads == None:
-            return []
+    @final
+    def __preprocess_payload(self, payload):
+        processed_payload = payload
 
-        if isinstance(payloads, list):
-            return payloads
+        try:
+            for processor in self.payload_preprocessors():
+                processed_payload = processor(processed_payload)
 
-        if isinstance(payloads, Iterable):
-            return [*payloads]
+            return processed_payload
+        except Exception as e:
+            print("Payload processing errro!", e)
 
-        raise Exception("Payloads must be iterable!")
+        return payload
 
-    def _run(self, payloads: list):
+    @final
+    def __preprocess_payloads(self, payloads):
+        if not isinstance(payloads, Iterable):
+            return [self.__preprocess_payload(payloads)]
+
+        result = []
+
+        for payload in payloads:
+            result.append(self.__preprocess_payload(payload))
+
+        return result
+
+    def process(self, payloads: list):
         """
         Processes all of the payloads.
 
@@ -129,7 +160,7 @@ class GenericConsumer(ABC):
         """
         return SIGABRT
 
-    def _run_one(self, payload):
+    def process_one(self, payload):
         """
         Processes payloads 1 by 1.
 
@@ -146,25 +177,36 @@ class GenericConsumer(ABC):
         self.args = args
         self.kwargs = kwargs
 
-        self._init()
+        self.init()
 
-        payloads = self.__get_payloads()
+        payloads = self.get_payloads()
+        payloads = self.__preprocess_payloads(payloads)
+        payloads_count = len(payloads)
+        queue_name = self.queue_name()
 
-        result = self._run(payloads)
-
-        if result != SIGABRT:
-            yield result
-            return
+        if payloads_count > 0:
+            print(
+                "Got",
+                payloads_count,
+                f"payload(s) from '{queue_name}'.",
+            )
 
         for payload in payloads:
-            result = self._run_one(payload)
+            result = self.process_one(payload)
 
             if result == SIGABRT:
                 break
 
             yield result
 
+        result = self.process(payloads)
+
+        if result != SIGABRT:
+            yield result
+            return
+
     @staticmethod
+    @final
     def __consumer_predicate(consumer: Type["GenericConsumer"]):
         max_run_count = consumer.max_run_count()
 
@@ -265,6 +307,7 @@ class GenericConsumer(ABC):
                 yield result
 
     @staticmethod
+    @final
     def __print_load_order(consumers: List["GenericConsumer"]):
         if not any(consumers):
             return
@@ -315,6 +358,7 @@ class GenericConsumer(ABC):
         print()
 
     @staticmethod
+    @final
     def __get_printed_queue_name(
         item: Type["GenericConsumer"],
         queue_name: Optional[str],
@@ -346,6 +390,7 @@ class GenericConsumer(ABC):
         return text
 
     @staticmethod
+    @final
     def __draw_consumers(
         queue_name: str,
         consumers: List[Type["GenericConsumer"]],
@@ -404,6 +449,7 @@ class GenericConsumer(ABC):
         print()
 
     @staticmethod
+    @final
     def __draw_categories(
         queue_name: str,
         indent_size: int,
