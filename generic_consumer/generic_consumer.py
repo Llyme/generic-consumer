@@ -1,6 +1,6 @@
 from abc import ABC
 import re
-from signal import SIGABRT, SIGTERM
+from signal import SIGABRT
 from typing import (
     Any,
     Callable,
@@ -14,6 +14,7 @@ from typing import (
 )
 from fun_things import get_all_descendant_classes, categorizer
 from simple_chalk import chalk
+from .strings import *
 
 
 class GenericConsumer(ABC):
@@ -153,7 +154,7 @@ class GenericConsumer(ABC):
             return processed_payload
         except Exception as e:
             if self.log:
-                print("Payload processing error!", e)
+                print(ERROR_PAYLOAD, e)
 
         return payload
 
@@ -201,9 +202,10 @@ class GenericConsumer(ABC):
 
         if self.log and payloads_count > 0:
             print(
-                "Got",
-                payloads_count,
-                f"payload(s) from '{queue_name}'.",
+                INFO_PAYLOAD.format(
+                    count=payloads_count,
+                    queue_name=queue_name,
+                )
             )
 
         for payload in payloads:
@@ -312,10 +314,20 @@ class GenericConsumer(ABC):
 
         if require_non_passive_consumer and not has_non_passive:
             raise Exception(
-                f"No non-passive consumers for '{queue_name}'!",
+                ERROR_NO_ACTIVE_CONSUMER.format(
+                    queue_name=queue_name,
+                ),
             )
 
         for consumer in consumers:
+            if not consumer.enabled:
+                print(
+                    WARN_CONSUMER_DISABLED.format(
+                        queue_name=consumer.queue_name(),
+                    ),
+                )
+                continue
+
             results = consumer.run()
 
             for result in results:

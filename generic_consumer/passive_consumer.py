@@ -9,6 +9,8 @@ class PassiveConsumer(GenericConsumer, ABC):
     and will only run once.
     """
 
+    log = False
+
     @classmethod
     def passive(cls):
         return True
