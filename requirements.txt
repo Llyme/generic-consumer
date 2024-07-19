@@ -1,2 +1,2 @@
-fun-things==0.20.0
+fun-things==0.21.0
 simple-chalk==0.1.0

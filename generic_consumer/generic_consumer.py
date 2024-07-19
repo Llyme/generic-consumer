@@ -28,6 +28,7 @@ class GenericConsumer(ABC):
     """
     __run_count = 0
 
+    @final
     def init(self):
         """
         Called when `run()` is called.
@@ -35,6 +36,7 @@ class GenericConsumer(ABC):
         pass
 
     @classmethod
+    @final
     def get_run_count(cls):
         """
         The amount of times this consumer has run.
