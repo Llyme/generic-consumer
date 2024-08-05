@@ -2,13 +2,13 @@
 
 [[package]]
 name = "fun-things"
-version = "0.21.0"
+version = "0.23.0"
 description = ""
 optional = false
 python-versions = "<4.0,>=3.8"
 files = [
-    {file = "fun_things-0.21.0-py3-none-any.whl", hash = "sha256:04b089fe6cea2241292b43ed42506fd82d7fb8aa93a6b3607dba43fc4528011b"},
-    {file = "fun_things-0.21.0.tar.gz", hash = "sha256:d9bdc02e23e94589d67a3b88c1df9ab024f3a1544ab237ebfc0b53d82845b0df"},
+    {file = "fun_things-0.23.0-py3-none-any.whl", hash = "sha256:6531c3ff015d65407a8c19c3b1066cdd8f07c114ccc65d9ea791480ba45e7b2d"},
+    {file = "fun_things-0.23.0.tar.gz", hash = "sha256:1497ac752b4efb14bfeeede3d4d3ac2a5be6b2c0595ca0fd610abdb3dbc5dea0"},
 ]
 
 [package.dependencies]
@@ -27,4 +27,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.8"
-content-hash = "d23ad9086b009b703715a03742f737e723ad4beb7268697f11ee09db557c8eba"
+content-hash = "6d30f47f07ca14ae4d400fe7f63c34a7826bf85dd5c012c6416d63f6e83b9d70"
