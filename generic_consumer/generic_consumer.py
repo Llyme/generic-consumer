@@ -205,7 +205,7 @@ class GenericConsumer(ABC):
         payloads_count = len(payloads)
         queue_name = self.queue_name()
 
-        if self.process_empty_payloads and payloads_count == 0:
+        if not self.process_empty_payloads and payloads_count == 0:
             return
 
         if self.log and payloads_count > 0:
@@ -328,13 +328,22 @@ class GenericConsumer(ABC):
             )
 
         for consumer in consumers:
-            if not consumer.enabled:
+            if cls.log:
+                queue_name = consumer.queue_name()
+
+                if not consumer.enabled:
+                    print(
+                        WARN_CONSUMER_DISABLED.format(
+                            queue_name=queue_name,
+                        ),
+                    )
+                    continue
+
                 print(
-                    WARN_CONSUMER_DISABLED.format(
-                        queue_name=consumer.queue_name(),
-                    ),
+                    INFO_CONSUMER_RUN.format(
+                        queue_name=queue_name,
+                    )
                 )
-                continue
 
             results = consumer.run()
 

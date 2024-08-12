@@ -18,3 +18,9 @@ INFO_PAYLOAD: str = "".join(
         chalk.green("'."),
     ]
 )
+INFO_CONSUMER_RUN: str = chalk.gray.dim(
+    "\r\nRunning `{0}`...\r\n",
+)
+INFO_CONSUMER_RUN: str = INFO_CONSUMER_RUN.format(
+    chalk.bold("{queue_name}"),
+)
