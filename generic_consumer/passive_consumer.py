@@ -10,6 +10,7 @@ class PassiveConsumer(GenericConsumer, ABC):
     """
 
     log = False
+    process_empty_payloads = True
 
     @classmethod
     def passive(cls):

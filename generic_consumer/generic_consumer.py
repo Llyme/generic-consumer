@@ -26,6 +26,14 @@ class GenericConsumer(ABC):
     """
     If this consumer should print in the console.
     """
+    process_empty_payloads = False
+    """
+    If the consumer should still process
+    even if there are no payloads.
+
+    `process_one` will not be called
+    even if this is `True`.
+    """
     __run_count = 0
 
     @final
@@ -165,12 +173,7 @@ class GenericConsumer(ABC):
         if not isinstance(payloads, Iterable):
             return [self.__preprocess_payload(payloads)]
 
-        result = []
-
-        for payload in payloads:
-            result.append(self.__preprocess_payload(payload))
-
-        return result
+        return [*map(self.__preprocess_payload, payloads)]
 
     def process(self, payloads: list):
         """
@@ -201,6 +204,9 @@ class GenericConsumer(ABC):
         payloads = self.__preprocess_payloads(payloads)
         payloads_count = len(payloads)
         queue_name = self.queue_name()
+
+        if self.process_empty_payloads and payloads_count == 0:
+            return
 
         if self.log and payloads_count > 0:
             print(
