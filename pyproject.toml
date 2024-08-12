@@ -1,14 +1,14 @@
 [tool.poetry]
 name = "generic-consumer"
-version = "0.15.9"
+version = "0.15.10"
 description = ""
 authors = ["Mister Nyan <michael.edmund.wong@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.8"
-simple-chalk = "^0.1.0"
-fun-things = "^0.24.4"
+simple-chalk = "*"
+fun-things = "*"
 
 
 [build-system]
