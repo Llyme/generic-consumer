@@ -1,6 +1,8 @@
 from abc import ABC
+from logging import Logger
 import re
 from signal import SIGABRT
+from time import perf_counter
 from typing import (
     Any,
     Callable,
@@ -13,8 +15,10 @@ from typing import (
     final,
 )
 from fun_things import get_all_descendant_classes, categorizer
+import fun_things.logger
 from simple_chalk import chalk
 from .strings import *
+from .logger import logger
 
 
 class GenericConsumer(ABC):
@@ -24,7 +28,7 @@ class GenericConsumer(ABC):
     """
     log = True
     """
-    If this consumer should print in the console.
+    If the consumer should print logs.
     """
     process_empty_payloads = False
     """
@@ -164,7 +168,7 @@ class GenericConsumer(ABC):
             return processed_payload
         except Exception as e:
             if self.log:
-                print(ERROR_PAYLOAD, e)
+                logger.error(ERROR_PAYLOAD, e)
 
         return payload
 
@@ -190,10 +194,13 @@ class GenericConsumer(ABC):
         return SIGABRT
 
     @final
-    def run(self, *args, **kwargs) -> Generator[Any, Any, None]:
-        """
-        Ignores `max_run_count`.
-        """
+    def run_all(self, *args, **kwargs):
+        return [*self.run(*args, **kwargs)]
+
+    @final
+    def __run(self, *args, **kwargs) -> Generator[Any, Any, None]:
+        queue_name = self.queue_name()
+
         self.__class__.__run_count += 1
         self.args = args
         self.kwargs = kwargs
@@ -203,13 +210,12 @@ class GenericConsumer(ABC):
         payloads = self.get_payloads()
         payloads = self.__preprocess_payloads(payloads)
         payloads_count = len(payloads)
-        queue_name = self.queue_name()
 
         if not self.process_empty_payloads and payloads_count == 0:
             return
 
         if self.log and payloads_count > 0:
-            print(
+            logger.info(
                 INFO_PAYLOAD.format(
                     count=payloads_count,
                     queue_name=queue_name,
@@ -229,6 +235,33 @@ class GenericConsumer(ABC):
         if result != SIGABRT:
             yield result
             return
+
+    @final
+    def run(self, *args, **kwargs):
+        """
+        Ignores `max_run_count`.
+        """
+        queue_name = self.queue_name()
+
+        logger.debug(
+            INFO_CONSUMER_START.format(
+                queue_name=queue_name,
+            ),
+        )
+
+        t1 = perf_counter()
+
+        for result in self.__run(*args, **kwargs):
+            yield result
+
+        t2 = perf_counter()
+
+        logger.debug(
+            INFO_CONSUMER_END.format(
+                queue_name=queue_name,
+                duration=t2 - t1,
+            )
+        )
 
     @staticmethod
     @final
@@ -296,6 +329,24 @@ class GenericConsumer(ABC):
 
     @classmethod
     @final
+    def start_all(
+        cls,
+        queue_name: str,
+        print_consumers=True,
+        print_indent=2,
+        require_non_passive_consumer=True,
+    ):
+        return [
+            *cls.start(
+                queue_name,
+                print_consumers,
+                print_indent,
+                require_non_passive_consumer,
+            )
+        ]
+
+    @classmethod
+    @final
     def start(
         cls,
         queue_name: str,
@@ -313,7 +364,7 @@ class GenericConsumer(ABC):
         )
         has_non_passive = any(has_non_passive)
 
-        if cls.log and print_consumers:
+        if print_consumers:
             cls.print_available_consumers(
                 queue_name,
                 print_indent,
@@ -328,26 +379,17 @@ class GenericConsumer(ABC):
             )
 
         for consumer in consumers:
-            if cls.log:
-                queue_name = consumer.queue_name()
+            queue_name = consumer.queue_name()
 
-                if not consumer.enabled:
-                    print(
-                        WARN_CONSUMER_DISABLED.format(
-                            queue_name=queue_name,
-                        ),
-                    )
-                    continue
-
-                print(
-                    INFO_CONSUMER_RUN.format(
+            if not consumer.enabled:
+                logger.debug(
+                    WARN_CONSUMER_DISABLED.format(
                         queue_name=queue_name,
-                    )
+                    ),
                 )
+                continue
 
-            results = consumer.run()
-
-            for result in results:
+            for result in consumer.run():
                 yield result
 
     @staticmethod

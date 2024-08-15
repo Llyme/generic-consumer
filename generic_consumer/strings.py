@@ -1,14 +1,8 @@
 from simple_chalk import chalk
 
-WARN_CONSUMER_DISABLED: str = "".join(
-    [
-        chalk.yellow("'"),
-        "{queue_name}",
-        chalk.yellow("' was disabled during runtime!"),
-    ]
-)
+WARN_CONSUMER_DISABLED = "'{queue_name}' was disabled during runtime!"
 ERROR_NO_ACTIVE_CONSUMER: str = "No non-passive consumers for '{queue_name}'!"
-ERROR_PAYLOAD: str = chalk.yellow("Payload processing error!")
+ERROR_PAYLOAD: str = "Payload processing error!"
 INFO_PAYLOAD: str = "".join(
     [
         chalk.green("Got "),
@@ -18,9 +12,5 @@ INFO_PAYLOAD: str = "".join(
         chalk.green("'."),
     ]
 )
-INFO_CONSUMER_RUN: str = chalk.gray.dim(
-    "\r\nRunning `{0}`...\r\n",
-)
-INFO_CONSUMER_RUN: str = INFO_CONSUMER_RUN.format(
-    chalk.bold("{queue_name}"),
-)
+INFO_CONSUMER_START: str = "Running `{queue_name}`..."
+INFO_CONSUMER_END: str = "'{queue_name}' done in {duration:.2f}s."
