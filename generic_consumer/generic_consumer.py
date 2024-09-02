@@ -1,22 +1,28 @@
 from abc import ABC
-from logging import Logger
+import asyncio
+import inspect
 import re
-from signal import SIGABRT
 from time import perf_counter
 from typing import (
     Any,
     Callable,
-    Generator,
     Iterable,
     List,
     Optional,
-    Tuple,
     Type,
     final,
 )
-from fun_things import get_all_descendant_classes, categorizer
-import fun_things.logger
+from fun_things import (
+    get_all_descendant_classes,
+    categorizer,
+    as_asyncgen,
+    as_async,
+    as_gen,
+)
 from simple_chalk import chalk
+
+from .signal import Signal
+
 from .strings import *
 from .logger import logger
 
@@ -24,7 +30,7 @@ from .logger import logger
 class GenericConsumer(ABC):
     enabled = True
     """
-    If this consumer is enabled.
+    If this consumer is enabled for activation.
     """
     log = True
     """
@@ -39,13 +45,6 @@ class GenericConsumer(ABC):
     even if this is `True`.
     """
     __run_count = 0
-
-    @final
-    def init(self):
-        """
-        Called when `run()` is called.
-        """
-        pass
 
     @classmethod
     @final
@@ -98,6 +97,10 @@ class GenericConsumer(ABC):
 
         You can override this by making a static/class method
         with the name `queue_name`.
+
+        Can be asynchronous.
+
+        Can be iterable.
         """
         return re.sub(
             # 1;
@@ -116,6 +119,13 @@ class GenericConsumer(ABC):
         ).upper()
 
     @classmethod
+    @final
+    async def __first_queue_name(cls):
+        value = as_asyncgen(cls.queue_name())
+
+        return await value.__anext__()
+
+    @classmethod
     def priority_number(cls):
         """
         If there are multiple consumers that
@@ -128,7 +138,7 @@ class GenericConsumer(ABC):
         return 0
 
     @classmethod
-    def condition(cls, queue_name: str):
+    async def condition(cls, queue_name: str):
         """
         Must return `True` in order for this consumer to be selected.
 
@@ -137,15 +147,48 @@ class GenericConsumer(ABC):
 
         You can override this by making a static/class method
         with the name `condition`.
-        """
-        return cls.queue_name() == queue_name
 
-    def get_payloads(self):  # type: ignore
+        Can be asynchronous.
+        """
+        async for queue_name0 in as_asyncgen(cls.queue_name()):
+            if queue_name0 == queue_name:
+                return True
+
+        return False
+
+    def init(self):
+        """
+        Called when `run()` is called.
+
+        Can be asynchronous.
+
+        Can be a generator.
+        """
+        pass
+
+    def get_nested_consumers(self):
+        """
+        Return the nested consumers here.
+
+        Can be non-iterable,
+        which becomes an array with a single value.
+
+        Can be asynchronous.
+
+        Can be iterable.
+        """
+        pass
+
+    def get_payloads(self):
         """
         Return the payloads here.
 
         Can be non-iterable,
         which becomes an array with a single value.
+
+        Can be asynchronous.
+
+        Can be iterable.
         """
         pass
 
@@ -154,62 +197,84 @@ class GenericConsumer(ABC):
     ) -> Iterable[Callable]:
         """
         Transforms payloads before being processed.
+
+        Can be asynchronous.
+
+        Can be iterable.
         """
         return []
 
     @final
-    def __preprocess_payload(self, payload):
+    async def __preprocess_payload(self, payload):
         processed_payload = payload
 
         try:
-            for processor in self.payload_preprocessors():
+            processors = as_asyncgen(self.payload_preprocessors())
+
+            async for processor in processors:
                 processed_payload = processor(processed_payload)
 
             return processed_payload
+
         except Exception as e:
             if self.log:
                 logger.error(ERROR_PAYLOAD, e)
 
         return payload
 
-    @final
-    def __preprocess_payloads(self, payloads):
-        if not isinstance(payloads, Iterable):
-            return [self.__preprocess_payload(payloads)]
-
-        return [*map(self.__preprocess_payload, payloads)]
-
     def process(self, payloads: list):
         """
         Processes all of the payloads.
+
+        Return `Signal.BREAK`
+        to stop.
+
+        Return `Signal.INTERRUPT`
+        to prevent the next processes.
+
+        Return `Signal.TERMINATE`
+        to stop the entire process.
         """
-        return SIGABRT
+        return Signal.BREAK
 
     def process_one(self, payload):
         """
         Processes payloads 1 by 1.
 
-        Return `signal.SIGABRT` to stop.
+        Return `Signal.BREAK`
+        to stop.
+
+        Return `Signal.INTERRUPT`
+        to prevent the next processes.
+
+        Return `Signal.TERMINATE`
+        to stop the entire process.
         """
-        return SIGABRT
+        return Signal.BREAK
 
     @final
-    def run_all(self, *args, **kwargs):
-        return [*self.run(*args, **kwargs)]
-
-    @final
-    def __run(self, *args, **kwargs) -> Generator[Any, Any, None]:
-        queue_name = self.queue_name()
+    async def __run(
+        self,
+        *args,
+        **kwargs,
+    ):
+        queue_name = await self.__first_queue_name()
 
         self.__class__.__run_count += 1
         self.args = args
         self.kwargs = kwargs
 
-        self.init()
+        async for _ in as_asyncgen(self.init()):
+            pass  # Only initializing.
 
-        payloads = self.get_payloads()
-        payloads = self.__preprocess_payloads(payloads)
-        payloads_count = len(payloads)
+        payloads = []
+        payloads_count = 0
+
+        async for payload in as_asyncgen(self.get_payloads()):
+            payloads.append(
+                await self.__preprocess_payload(payload),
+            )
+            payloads_count += 1
 
         if not self.process_empty_payloads and payloads_count == 0:
             return
@@ -223,25 +288,82 @@ class GenericConsumer(ABC):
             )
 
         for payload in payloads:
-            result = self.process_one(payload)
+            stop = False
+            values = self.process_one(payload)
+            values = as_asyncgen(
+                values,
+                lambda value: inspect.isgenerator(
+                    value,
+                )
+                or inspect.isasyncgen(
+                    value,
+                ),
+            )
 
-            if result == SIGABRT:
+            async for value in values:
+                if value == Signal.CONTINUE:
+                    continue
+
+                if value == Signal.BREAK:
+                    break
+
+                if value == Signal.INTERRUPT:
+                    stop = True
+                    break
+
+                if value == Signal.TERMINATE:
+                    yield Signal.TERMINATE
+                    return
+
+                yield value
+
+            if stop:
                 break
 
-            yield result
+        values = self.process(payloads)
+        values = as_asyncgen(
+            values,
+            lambda value: inspect.isgenerator(
+                value,
+            )
+            or inspect.isasyncgen(
+                value,
+            ),
+        )
 
-        result = self.process(payloads)
+        async for value in values:
+            if value == Signal.CONTINUE:
+                continue
 
-        if result != SIGABRT:
-            yield result
-            return
+            if value == Signal.BREAK:
+                break
+
+            if value == Signal.INTERRUPT:
+                break
+
+            if value == Signal.TERMINATE:
+                yield Signal.TERMINATE
+                return
+
+            yield value
 
     @final
-    def run(self, *args, **kwargs):
-        """
-        Ignores `max_run_count`.
-        """
-        queue_name = self.queue_name()
+    async def run_async_all(self, *args, **kwargs):
+        items = []
+
+        async for item in self.__run_async(args, kwargs, False):
+            items.append(item)
+
+        return items
+
+    @final
+    async def __run_async(
+        self,
+        args: tuple,
+        kwargs: dict,
+        return_signals: bool,
+    ):
+        queue_name = await self.__first_queue_name()
 
         logger.debug(
             INFO_CONSUMER_START.format(
@@ -250,9 +372,14 @@ class GenericConsumer(ABC):
         )
 
         t1 = perf_counter()
+        stop = False
 
-        for result in self.__run(*args, **kwargs):
-            yield result
+        async for item in self.__run(*args, **kwargs):
+            if item == Signal.TERMINATE:
+                stop = True
+                break
+
+            yield item
 
         t2 = perf_counter()
 
@@ -262,6 +389,28 @@ class GenericConsumer(ABC):
                 duration=t2 - t1,
             )
         )
+
+        if return_signals and stop:
+            yield Signal.TERMINATE
+
+    @final
+    async def run_async(self, *args, **kwargs):
+        """
+        Ignores `max_run_count`.
+        """
+        async for item in self.__run_async(args, kwargs, False):
+            yield item
+
+    @final
+    def run_all(self, *args, **kwargs):
+        return [*self.run(*args, **kwargs)]
+
+    @final
+    def run(self, *args, **kwargs):
+        """
+        Ignores `max_run_count`.
+        """
+        return as_gen(self.__run_async(args, kwargs, False))
 
     @staticmethod
     @final
@@ -296,15 +445,38 @@ class GenericConsumer(ABC):
 
     @classmethod
     @final
+    async def get_consumer_async(cls, queue_name: str):
+        consumers = cls.get_consumers_async(queue_name)
+
+        async for consumer in consumers:
+            return consumer
+
+    @classmethod
+    @final
     def get_consumer(cls, queue_name: str):
         """
         Returns the first consumer with the given `queue_name`
         and the highest priority number.
         """
-        descendants = cls.get_consumers(queue_name)
+        return asyncio.new_event_loop().run_until_complete(
+            cls.get_consumer_async(queue_name),
+        )
+
+    @classmethod
+    @final
+    async def get_consumers_async(cls, queue_name: str):
+        descendants = GenericConsumer.available_consumers()
 
         for descendant in descendants:
-            return descendant
+            if not descendant.enabled:
+                continue
+
+            ok = as_async(descendant.condition(queue_name))
+
+            if not await ok:
+                continue
+
+            yield descendant()
 
     @classmethod
     @final
@@ -316,16 +488,92 @@ class GenericConsumer(ABC):
 
         The consumers are instantiated while generating.
         """
-        descendants = GenericConsumer.available_consumers()
+        return as_gen(cls.get_consumers_async(queue_name))
 
-        for descendant in descendants:
-            if not descendant.enabled:
+    @classmethod
+    @final
+    async def start_all_async(
+        cls,
+        queue_name: str,
+        print_consumers=True,
+        print_indent=2,
+        require_non_passive_consumer=True,
+    ):
+        items = []
+
+        async for item in cls.start_async(
+            queue_name,
+            print_consumers,
+            print_indent,
+            require_non_passive_consumer,
+        ):
+            items.append(item)
+
+        return items
+
+    @classmethod
+    @final
+    async def start_async(
+        cls,
+        queue_name: str,
+        print_consumers=True,
+        print_indent=2,
+        require_non_passive_consumer=True,
+    ):
+        consumers: List["GenericConsumer"] = []
+
+        async for consumer in cls.get_consumers_async(queue_name):
+            consumers.append(consumer)
+
+        has_non_passive = map(
+            lambda consumer: not consumer.passive(),
+            consumers,
+        )
+        has_non_passive = any(has_non_passive)
+
+        if print_consumers:
+            await cls.print_available_consumers_async(
+                queue_name,
+                print_indent,
+            )
+
+            await cls.__print_load_order(
+                consumers,
+            )
+
+        if require_non_passive_consumer and not has_non_passive:
+            raise Exception(
+                ERROR_NO_ACTIVE_CONSUMER.format(
+                    queue_name=queue_name,
+                ),
+            )
+
+        for consumer in consumers:
+            queue_name = await consumer.__first_queue_name()
+
+            if not consumer.enabled:
+                logger.debug(
+                    WARN_CONSUMER_DISABLED.format(
+                        queue_name=queue_name,
+                    ),
+                )
                 continue
 
-            if not descendant.condition(queue_name):
-                continue
+            stop = False
 
-            yield descendant()
+            async for item in consumer.__run_async(
+                (),
+                {},
+                True,
+            ):
+                if item == Signal.TERMINATE:
+                    stop = True
+                    break
+
+                yield item
+
+            if stop:
+                break
 
     @classmethod
     @final
@@ -357,44 +605,20 @@ class GenericConsumer(ABC):
         """
         Requires at least 1 non-passive consumer to be selected.
         """
-        consumers = [*cls.get_consumers(queue_name)]
-        has_non_passive = map(
-            lambda v: not v.passive(),
-            consumers,
-        )
-        has_non_passive = any(has_non_passive)
-
-        if print_consumers:
-            cls.print_available_consumers(
+        return as_gen(
+            cls.start_async(
                 queue_name,
+                print_consumers,
                 print_indent,
-            )
-            cls.__print_load_order(consumers)
-
-        if require_non_passive_consumer and not has_non_passive:
-            raise Exception(
-                ERROR_NO_ACTIVE_CONSUMER.format(
-                    queue_name=queue_name,
-                ),
-            )
-
-        for consumer in consumers:
-            queue_name = consumer.queue_name()
-
-            if not consumer.enabled:
-                logger.debug(
-                    WARN_CONSUMER_DISABLED.format(
-                        queue_name=queue_name,
-                    ),
-                )
-                continue
-
-            for result in consumer.run():
-                yield result
+                require_non_passive_consumer,
+            ),
+        )
 
     @staticmethod
     @final
-    def __print_load_order(consumers: List["GenericConsumer"]):
+    async def __print_load_order(
+        consumers: List["GenericConsumer"],
+    ):
         if not any(consumers):
             return
 
@@ -403,14 +627,14 @@ class GenericConsumer(ABC):
             chalk.yellow.bold("↓"),
         )
 
-        items = map(
-            lambda consumer: (
+        items = [
+            (
                 consumer.priority_number(),
-                consumer.queue_name(),
+                await consumer.__first_queue_name(),
                 consumer.passive(),
-            ),
-            consumers,
-        )
+            )
+            for consumer in consumers
+        ]
 
         has_negative = consumers[-1].priority_number() < 0
         zfill = map(
@@ -445,11 +669,11 @@ class GenericConsumer(ABC):
 
     @staticmethod
     @final
-    def __get_printed_queue_name(
+    async def __get_printed_queue_name(
         item: Type["GenericConsumer"],
         queue_name: Optional[str],
     ):
-        text = item.queue_name()
+        text = await item.__first_queue_name()
 
         if queue_name == None:
             return text
@@ -459,7 +683,7 @@ class GenericConsumer(ABC):
             text = chalk.dim.gray(text)
             text = f"{text} {chalk.bold('✕')}"
 
-        elif not item.condition(queue_name):
+        elif not await as_async(item.condition(queue_name)):
             # Enabled, but condition is not met.
             text = chalk.dim.gray(text)
 
@@ -477,21 +701,24 @@ class GenericConsumer(ABC):
 
     @staticmethod
     @final
-    def __draw_consumers(
+    async def __draw_consumers(
         queue_name: str,
-        consumers: List[Type["GenericConsumer"]],
+        consumers,
         indent_text: str,
     ):
-        consumers.sort(
+        consumers0: List[Type["GenericConsumer"]] = [
+            consumer[0] for consumer in consumers
+        ]
+        consumers0.sort(
             key=lambda consumer: consumer.priority_number(),
             reverse=True,
         )
 
-        count = len(consumers)
+        count = len(consumers0)
         priority_numbers = [
             *map(
                 lambda consumer: consumer.priority_number(),
-                consumers,
+                consumers0,
             )
         ]
         max_priority_len = map(
@@ -508,7 +735,7 @@ class GenericConsumer(ABC):
         if has_negative:
             max_priority_len += 1
 
-        for consumer in consumers:
+        for consumer in consumers0:
             count -= 1
 
             priority_number = consumer.priority_number()
@@ -526,7 +753,7 @@ class GenericConsumer(ABC):
             print(
                 f"{indent_text}{line}",
                 f"[{chalk.yellow(priority_number)}]",
-                GenericConsumer.__get_printed_queue_name(
+                await GenericConsumer.__get_printed_queue_name(
                     consumer,
                     queue_name,
                 ),
@@ -536,7 +763,7 @@ class GenericConsumer(ABC):
 
     @staticmethod
     @final
-    def __draw_categories(
+    async def __draw_categories(
         queue_name: str,
         indent_size: int,
         indent_scale: int,
@@ -551,7 +778,7 @@ class GenericConsumer(ABC):
         print(f"{indent_text}{chalk.yellow(keyword)}:")
 
         if isinstance(category, list):
-            GenericConsumer.__draw_consumers(
+            await GenericConsumer.__draw_consumers(
                 queue_name=queue_name,
                 consumers=category,
                 indent_text=indent_text,
@@ -563,7 +790,7 @@ class GenericConsumer(ABC):
 
     @classmethod
     @final
-    def print_available_consumers(
+    async def print_available_consumers_async(
         cls,
         queue_name: str = None,  # type: ignore
         indent: int = 2,
@@ -572,15 +799,20 @@ class GenericConsumer(ABC):
             lambda consumer: not consumer.hidden(),
             cls.available_consumers(),
         )
-        categorized: List[Tuple[int, Tuple[str, Any]]] = list(
-            map(
-                lambda consumer: (0, consumer),
-                categorizer(
-                    consumers,
-                    lambda consumer: consumer.queue_name(),
-                ).items(),
+        # categorized: List[Tuple[int, Tuple[str, Any]]] = []
+        categorized = [
+            (
+                consumer,
+                await consumer.__first_queue_name(),
             )
+            for consumer in consumers
+        ]
+        categorized = categorizer(
+            categorized,
+            lambda tuple: tuple[1],
         )
+        categorized = categorized.items()
+        categorized = [(0, v) for v in categorized]
 
         while len(categorized) > 0:
             indent_size, (keyword, category) = categorized.pop()
@@ -593,5 +825,19 @@ class GenericConsumer(ABC):
                 category=category,
             )
 
-            for sub_category in sub_categories:
+            async for sub_category in sub_categories:
                 categorized.append(sub_category)
+
+    @classmethod
+    @final
+    def print_available_consumers(
+        cls,
+        queue_name: str = None,  # type: ignore
+        indent: int = 2,
+    ):
+        asyncio.new_event_loop().run_until_complete(
+            cls.print_available_consumers_async(
+                queue_name,
+                indent,
+            )
+        )
