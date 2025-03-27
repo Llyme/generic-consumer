@@ -1,30 +1,17 @@
-from abc import ABC
 import asyncio
 import inspect
 import re
+import traceback
+from abc import ABC
 from time import perf_counter
-from typing import (
-    Any,
-    Callable,
-    Generator,
-    Iterable,
-    List,
-    Optional,
-    Type,
-    final,
-)
-from fun_things import (
-    get_all_descendant_classes,
-    categorizer,
-    as_gen,
-    as_sync,
-)
+from typing import Any, Callable, Generator, Iterable, List, Optional, Type, final
+
+from fun_things import as_gen, as_sync, categorizer, get_all_descendant_classes
 from simple_chalk import chalk
 
-from .signal import Signal
-
-from .strings import *
 from .logger import logger
+from .signal import Signal
+from .strings import *
 
 
 class GenericConsumer(ABC):
@@ -574,6 +561,10 @@ class GenericConsumer(ABC):
                 ),
             )
 
+        __errors: List[Exception] = []
+        __errors_str: List[str] = []
+        __errors_stacktrace: List[str] = []
+
         for consumer in consumers:
             queue_name = consumer.__first_queue_name()
 
@@ -587,16 +578,26 @@ class GenericConsumer(ABC):
 
             stop = False
 
-            for item in consumer.__run(
-                (),
-                {},
-                True,
-            ):
-                if item == Signal.TERMINATE:
-                    stop = True
-                    break
+            try:
+                for item in consumer.__run(
+                    (),
+                    dict(
+                        __errors=__errors,
+                        __errors_str=__errors_str,
+                        __errors_stacktrace=__errors_stacktrace,
+                    ),
+                    True,
+                ):
+                    if item == Signal.TERMINATE:
+                        stop = True
+                        break
 
-                yield item
+                    yield item
+            except Exception as e:
+                traceback.print_exc()
+                __errors.append(e)
+                __errors_str.append(str(e))
+                __errors_stacktrace.append(traceback.format_exc())
 
             if stop:
                 break

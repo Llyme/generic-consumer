@@ -13,17 +13,17 @@ class PassiveConsumer(GenericConsumer, ABC):
     process_empty_payloads = True
 
     @classmethod
-    def passive(cls):
+    def passive(cls) -> bool:
         return True
 
     @classmethod
-    def max_run_count(cls):
+    def max_run_count(cls) -> int:
         return 1
 
     @classmethod
-    def priority_number(cls):
+    def priority_number(cls) -> float:
         return 100
 
     @classmethod
-    def condition(cls, queue_name: str):
+    def condition(cls, queue_name: str) -> bool:
         return True
